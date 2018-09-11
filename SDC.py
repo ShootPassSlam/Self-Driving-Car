@@ -1,10 +1,7 @@
-#!/usr/bin/env python2
-# -*- coding: utf-8 -*-
-"""
-Created on Tue Apr 10 11:05:23 2018
+# AI for Self Driving Car
 
-@author: dominicscotto
-"""
+# Importing the libraries
+
 import numpy as np
 import random
 import os
@@ -15,6 +12,8 @@ import torch.optim as optim
 import torch.autograd as autograd
 from torch.autograd import Variable
 
+# Creating the architecture of the Neural Network
+
 class Network(nn.Module):
     
     def __init__(self, input_size, nb_action):
@@ -23,11 +22,13 @@ class Network(nn.Module):
         self.nb_action = nb_action
         self.fc1 = nn.Linear(input_size, 30)
         self.fc2 = nn.Linear(30, nb_action)
-
+    
     def forward(self, state):
         x = F.relu(self.fc1(state))
         q_values = self.fc2(x)
         return q_values
+
+# Implementing Experience Replay
 
 class ReplayMemory(object):
     
@@ -44,8 +45,10 @@ class ReplayMemory(object):
         samples = zip(*random.sample(self.memory, batch_size))
         return map(lambda x: Variable(torch.cat(x, 0)), samples)
 
-class Dqn():
+# Implementing Deep Q Learning
 
+class Dqn():
+    
     def __init__(self, input_size, nb_action, gamma):
         self.gamma = gamma
         self.reward_window = []
@@ -55,27 +58,27 @@ class Dqn():
         self.last_state = torch.Tensor(input_size).unsqueeze(0)
         self.last_action = 0
         self.last_reward = 0
-        
+    
     def select_action(self, state):
-        probs = F.softmax(self.model(Variable(state, volatile= True))*7) #T = 7
+        probs = F.softmax(self.model(Variable(state, volatile = True))*100) # T=7
         action = probs.multinomial()
         return action.data[0,0]
     
     def learn(self, batch_state, batch_next_state, batch_reward, batch_action):
-        outputs = self.model(batch_state).gather(1,batch_action.unsqueeze(1)).squeeze(1)
+        outputs = self.model(batch_state).gather(1, batch_action.unsqueeze(1)).squeeze(1)
         next_outputs = self.model(batch_next_state).detach().max(1)[0]
         target = self.gamma*next_outputs + batch_reward
         td_loss = F.smooth_l1_loss(outputs, target)
         self.optimizer.zero_grad()
         td_loss.backward(retain_variables = True)
         self.optimizer.step()
-        
+    
     def update(self, reward, new_signal):
         new_state = torch.Tensor(new_signal).float().unsqueeze(0)
-        self.memory.push(self.last_state, new_state, torch.LongTensor([int(self.last_action)]), torch.Tensor([self.last_reward]))
+        self.memory.push((self.last_state, new_state, torch.LongTensor([int(self.last_action)]), torch.Tensor([self.last_reward])))
         action = self.select_action(new_state)
-        if len(self.memory.memory) >100:
-            batch_state, batch_next_state, batch_reward, batch_action = self.memory.sample(100)
+        if len(self.memory.memory) > 100:
+            batch_state, batch_next_state, batch_action, batch_reward = self.memory.sample(100)
             self.learn(batch_state, batch_next_state, batch_reward, batch_action)
         self.last_action = action
         self.last_state = new_state
@@ -86,21 +89,22 @@ class Dqn():
         return action
     
     def score(self):
-        return sum(self.reward_window)/(len(self.reward_window)+1)
+        return sum(self.reward_window)/(len(self.reward_window)+1.)
     
     def save(self):
         torch.save({'state_dict': self.model.state_dict(),
-                    'optimizer': self.optimizer.state_dict()
-                    }, 'last_brain.pth')
+                    'optimizer' : self.optimizer.state_dict(),
+                   }, 'last_brain.pth')
+    
     def load(self):
         if os.path.isfile('last_brain.pth'):
-            print(">>>>>>LOADING<<<<<<<<<<<<<")
+            print("=> loading checkpoint... ")
             checkpoint = torch.load('last_brain.pth')
             self.model.load_state_dict(checkpoint['state_dict'])
             self.optimizer.load_state_dict(checkpoint['optimizer'])
-            print("DONE")
+            print("done !")
         else:
-            print(">>>>>NO FILE FOUND<<<<<<")
+            print("no checkpoint found...")
         
         
         
